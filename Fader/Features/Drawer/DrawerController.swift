@@ -9,6 +9,7 @@ final class DrawerController: NSObject {
 
     private var panel: DrawerPanel?
     private var clickMonitor: Any?
+    private var keyMonitors: [Any] = []
     private var contentWork: DispatchWorkItem?
     private var orderOutWork: DispatchWorkItem?
     private(set) var isShown = false
@@ -35,6 +36,7 @@ final class DrawerController: NSObject {
         contentWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.24, execute: work)
         installClickMonitor()
+        installKeyMonitors()
     }
 
     func hide() {
@@ -43,6 +45,7 @@ final class DrawerController: NSObject {
         contentWork?.cancel()
         contentWork = nil
         removeClickMonitor()
+        removeKeyMonitors()
         panel?.ignoresMouseEvents = true
         withAnimation(.easeIn(duration: 0.14)) {
             model.showsContent = false
@@ -91,6 +94,32 @@ final class DrawerController: NSObject {
         host.layer?.backgroundColor = .clear
         panel.contentView = host
         return panel
+    }
+
+    private func installKeyMonitors() {
+        guard keyMonitors.isEmpty else { return }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { event in
+            guard event.keyCode == 53 else { return event }
+            Task { @MainActor in
+                DrawerController.shared.hide()
+            }
+            return nil
+        }) {
+            keyMonitors.append(local)
+        }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: { event in
+            guard event.keyCode == 53 else { return }
+            Task { @MainActor in
+                DrawerController.shared.hide()
+            }
+        }) {
+            keyMonitors.append(global)
+        }
+    }
+
+    private func removeKeyMonitors() {
+        keyMonitors.forEach { NSEvent.removeMonitor($0) }
+        keyMonitors = []
     }
 
     private func installClickMonitor() {
